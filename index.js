@@ -101,7 +101,9 @@ module.exports = {
    * @return {boolean} If available true, otherwise false.
    */
   isCipherAvailable: function (cipher) {
-    return this.crypto.getCiphers().some(function (name) { return name === cipher; });
+    return this.crypto.getCiphers().some(function (name) {
+      return name === cipher;
+    });
   },
 
   /**
@@ -178,43 +180,12 @@ module.exports = {
    * Used internally.
    */
   deriveKeyUsingScryptInNode: function (password, salt, options, cb) {
-    if (!isFunction(cb)) return this.deriveKeyUsingScryptInBrowser(password, salt, options);
+    if (!isFunction(cb)) throw new Error("cb must be a function");
     require("scrypt").hash(password, {
       N: options.kdfparams.n || this.constants.scrypt.n,
       r: options.kdfparams.r || this.constants.scrypt.r,
       p: options.kdfparams.p || this.constants.scrypt.p
     }, options.kdfparams.dklen || this.constants.scrypt.dklen, salt).then(cb).catch(cb);
-  },
-
-  /**
-   * Used internally.
-   */
-  deriveKeyUsingScryptInBrowser: function (password, salt, options, cb) {
-    var self = this;
-    if (this.scrypt === null) this.scrypt = require("./lib/scrypt");
-    if (isFunction(this.scrypt)) {
-      this.scrypt = this.scrypt(options.kdfparams.memory || this.constants.scrypt.memory);
-    }
-    if (!isFunction(cb)) {
-      return Buffer.from(this.scrypt.to_hex(this.scrypt.crypto_scrypt(
-        password,
-        salt,
-        options.kdfparams.n || this.constants.scrypt.n,
-        options.kdfparams.r || this.constants.scrypt.r,
-        options.kdfparams.p || this.constants.scrypt.p,
-        options.kdfparams.dklen || this.constants.scrypt.dklen
-      )), "hex");
-    }
-    setTimeout(function () {
-      cb(Buffer.from(self.scrypt.to_hex(self.scrypt.crypto_scrypt(
-        password,
-        salt,
-        options.kdfparams.n || self.constants.scrypt.n,
-        options.kdfparams.r || self.constants.scrypt.r,
-        options.kdfparams.p || self.constants.scrypt.p,
-        options.kdfparams.dklen || self.constants.scrypt.dklen
-      )), "hex"));
-    }, 0);
   },
 
   /**
@@ -243,7 +214,7 @@ module.exports = {
     // use scrypt as key derivation function
     if (options.kdf === "scrypt") {
       if (!this.browser) return this.deriveKeyUsingScryptInNode(password, salt, options, cb);
-      return this.deriveKeyUsingScryptInBrowser(password, salt, options, cb);
+      throw new Error("kdf cannot be 'scrypt' in browser");
     }
 
     // use default key derivation function (PBKDF2)
@@ -255,7 +226,7 @@ module.exports = {
           password.toString("utf8"),
           sjcl.codec.hex.toBits(salt.toString("hex")),
           options.kdfparams.c || self.constants.pbkdf2.c,
-          (options.kdfparams.dklen || self.constants.pbkdf2.dklen)*8
+          (options.kdfparams.dklen || self.constants.pbkdf2.dklen) * 8
         )), "hex");
       }
       return this.crypto.pbkdf2Sync(
@@ -272,7 +243,7 @@ module.exports = {
           password.toString("utf8"),
           sjcl.codec.hex.toBits(salt.toString("hex")),
           options.kdfparams.c || self.constants.pbkdf2.c,
-          (options.kdfparams.dklen || self.constants.pbkdf2.dklen)*8
+          (options.kdfparams.dklen || self.constants.pbkdf2.dklen) * 8
         )), "hex"));
       }, 0);
     } else {
@@ -353,7 +324,9 @@ module.exports = {
       crypto: {
         cipher: options.cipher || this.constants.cipher,
         ciphertext: ciphertext,
-        cipherparams: { iv: iv.toString("hex") },
+        cipherparams: {
+          iv: iv.toString("hex")
+        },
         mac: this.getMAC(derivedKey, ciphertext)
       },
       id: uuid.v4(), // random 128-bit UUID
@@ -470,84 +443,5 @@ module.exports = {
     if (process.platform === "win32") filename = filename.split(":").join("-");
 
     return filename;
-  },
-
-  /**
-   * Export formatted JSON to keystore file.
-   * @param {Object} keyObject Keystore object.
-   * @param {string=} keystore Path to keystore folder (default: "keystore").
-   * @param {function=} cb Callback function (optional).
-   * @return {string} JSON filename (Node.js) or JSON string (browser).
-   */
-  exportToFile: function (keyObject, keystore, cb) {
-    var outfile, outpath, json, fs;
-    keystore = keystore || "keystore";
-    outfile = this.generateKeystoreFilename(keyObject.address);
-    json = JSON.stringify(keyObject);
-    if (this.browser) {
-      if (!isFunction(cb)) return json;
-      return cb(json);
-    }
-    outpath = require("path").join(keystore, outfile);
-    fs = require("fs");
-    if (!isFunction(cb)) {
-      fs.writeFileSync(outpath, json);
-      return outpath;
-    }
-    fs.writeFile(outpath, json, function (err) {
-      if (err) return cb(err);
-      cb(outpath);
-    });
-  },
-
-  /**
-   * Import key data object from keystore JSON file.
-   * (Note: Node.js only!)
-   * @param {string} address Ethereum address to import.
-   * @param {string=} datadir Ethereum data directory (default: ~/.ethereum).
-   * @param {function=} cb Callback function (optional).
-   * @return {Object} Keystore data file's contents.
-   */
-  importFromFile: function (address, datadir, cb) {
-    var keystore, filepath, path, fs;
-    if (this.browser) throw new Error("method only available in Node.js");
-    path = require("path");
-    fs = require("fs");
-    address = address.replace("0x", "");
-    address = address.toLowerCase();
-
-    function findKeyfile(keystore, address, files) {
-      var i, len, filepath = null;
-      for (i = 0, len = files.length; i < len; ++i) {
-        if (files[i].indexOf(address) > -1) {
-          filepath = path.join(keystore, files[i]);
-          if (fs.lstatSync(filepath).isDirectory()) {
-            filepath = path.join(filepath, files[i]);
-          }
-          break;
-        }
-      }
-      return filepath;
-    }
-
-    datadir = datadir || path.join(process.env.HOME, ".ethereum");
-    keystore = path.join(datadir, "keystore");
-    if (!isFunction(cb)) {
-      filepath = findKeyfile(keystore, address, fs.readdirSync(keystore));
-      if (!filepath) {
-        throw new Error("could not find key file for address " + address);
-      }
-      return JSON.parse(fs.readFileSync(filepath));
-    }
-    fs.readdir(keystore, function (ex, files) {
-      var filepath;
-      if (ex) return cb(ex);
-      filepath = findKeyfile(keystore, address, files);
-      if (!filepath) {
-        return new Error("could not find key file for address " + address);
-      }
-      return cb(JSON.parse(fs.readFileSync(filepath)));
-    });
   }
-
 };

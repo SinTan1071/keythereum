@@ -1,5 +1,5 @@
 {
-  "name": "keythereum",
+  "name": "keythereum-spa",
   "version": "1.0.4",
   "description": "Create, import and export Ethereum keys",
   "main": "index.js",
