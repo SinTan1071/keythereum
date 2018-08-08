@@ -17,7 +17,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ethereumjs/keythereum.git"
+    "url": "https://github.com/SinTan1071/keythereum.git"
   },
   "author": "Jack Peterson <jack@tinybike.net>",
   "license": "MIT",
